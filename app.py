@@ -1,150 +1,93 @@
-# 효인아 이거 보고나서 방문기록 삭제 해. 그리고. 주석도 다 삭제하구 알겠지? ctrl + h 누르면 방문기록 나와 그거에서 github만 삭제해 오키?? 주석은 효인이가 이해 한것만 하구 알겠지 이거 동작되도 이 코드 이해하고 다 했다고 해
-
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify
 import os
 
 app = Flask(__name__)
 
-# 파일 저장 경로 설정
-BASE_DIR = "files"  # 파일이 저장될 디렉토리
-if not os.path.exists(BASE_DIR):
-    os.makedirs(BASE_DIR)  # 디렉토리가 없으면 자동으로 생성
-
-# 유효성 검사 함수: 파일명과 내용이 올바른지 확인
-def validate_input(file_name, content=None):
-    """
-    파일명 및 내용에 대한 유효성 검사를 합니다.
-    - 파일명이 비어 있으면 오류를 반환
-    - 내용이 제공되었으면 내용도 검사
-    """
-    if not file_name or not file_name.strip():
-        return "File name cannot be empty", 400
-    if content is not None and not content.strip():
-        return "Content cannot be empty", 400
-    return None, None
-
-# /create 경로: 파일 생성
 @app.route('/create', methods=['POST'])
 def create_file():
-    """
-    POST 요청으로 파일을 생성하는 API.
-    요청 본문에 'file_name'과 'content'를 포함하여 파일을 생성하고 내용을 기록.
-    """
-    file_name = request.json.get('file_name', '').strip()
-    content = request.json.get('content', '').strip()
+    filename = request.json.get('filename')
+    
+    if not filename:
+        return jsonify({"error": "파일명이 제공되지 않았습니다."}), 400
+    
+    folder = os.path.dirname(filename)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder)  # 폴더가 없으면 자동으로 생성
+    
+    # 파일이 이미 존재하면 새로 생성하지 않고, 기존 파일을 재사용하도록 수정
+    if not os.path.exists(filename):
+        with open(filename, 'w') as file:
+            pass  # 빈 파일 생성
+    
+    return jsonify({"message": f"파일 '{filename}'이(가) 이미 존재하거나 새로 생성되었습니다."}), 200
 
-    error_message, status_code = validate_input(file_name, content)
-    if error_message:
-        return jsonify({"error": error_message}), status_code
-
-    file_path = os.path.join(BASE_DIR, file_name)
-
-    try:
-        with open(file_path, 'w') as file:
-            file.write(content)
-        return jsonify({"message": f"File '{file_name}' created successfully!"}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# /delete 경로: 파일 삭제
-@app.route('/delete', methods=['DELETE'])
+# 파일 삭제 API
+@app.route('/delete', methods=['POST'])
 def delete_file():
-    """
-    DELETE 요청으로 파일을 삭제하는 API.
-    요청 본문에 'file_name'을 포함하여 해당 파일을 삭제.
-    """
-    file_name = request.json.get('file_name', '').strip()
+    filename = request.json.get('filename')
+    
+    if not filename:
+        return jsonify({"error": "파일명이 제공되지 않았습니다."}), 400
+    
+    if not os.path.exists(filename):
+        return jsonify({"error": "파일이 존재하지 않습니다."}), 400
+    
+    os.remove(filename)
+    
+    return jsonify({"message": f"파일 '{filename}'이(가) 성공적으로 삭제되었습니다."}), 200
 
-    error_message, status_code = validate_input(file_name)
-    if error_message:
-        return jsonify({"error": error_message}), status_code
-
-    file_path = os.path.join(BASE_DIR, file_name)
-
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            return jsonify({"message": f"File '{file_name}' deleted successfully!"}), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    else:
-        return jsonify({"error": "File not found!"}), 404
-
-# /read 경로: 파일 읽기
-@app.route('/read', methods=['GET'])
+# 파일 읽기 API
+@app.route('/read', methods=['POST'])
 def read_file():
-    """
-    GET 요청으로 파일 내용을 읽는 API.
-    요청 본문에 'file_name'을 포함하여 해당 파일의 내용을 반환.
-    """
-    file_name = request.args.get('file_name', '').strip()
+    filename = request.json.get('filename')
+    
+    if not filename:
+        return jsonify({"error": "파일명이 제공되지 않았습니다."}), 400
+    
+    if not os.path.exists(filename):
+        return jsonify({"error": "파일이 존재하지 않습니다."}), 400
+    
+    with open(filename, 'r') as file:
+        content = file.read()
+    
+    return jsonify({"filename": filename, "content": content}), 200
 
-    error_message, status_code = validate_input(file_name)
-    if error_message:
-        return jsonify({"error": error_message}), status_code
-
-    file_path = os.path.join(BASE_DIR, file_name)
-
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as file:
-                content = file.read()
-            return jsonify({"content": content}), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    else:
-        return jsonify({"error": "File not found!"}), 404
-
-# /write 경로: 파일 내용 쓰기
+# 파일 내용 쓰기 API
 @app.route('/write', methods=['POST'])
 def write_file():
-    """
-    POST 요청으로 파일에 내용을 추가하는 API.
-    요청 본문에 'file_name'과 'content'를 포함하여 해당 파일에 내용을 추가.
-    """
-    file_name = request.json.get('file_name', '').strip()
-    content = request.json.get('content', '').strip()
+    filename = request.json.get('filename')
+    content = request.json.get('content')
+    
+    if not filename or not content:
+        return jsonify({"error": "파일명이나 내용이 제공되지 않았습니다."}), 400
+    
+    with open(filename, 'w') as file:
+        file.write(content)
+    
+    return jsonify({"message": f"파일 '{filename}'에 내용이 성공적으로 작성되었습니다."}), 200
 
-    error_message, status_code = validate_input(file_name, content)
-    if error_message:
-        return jsonify({"error": error_message}), status_code
+# 파일 내용 삭제 API
+@app.route('/delete_content', methods=['POST'])
+def delete_content():
+    filename = request.json.get('filename')
+    content_to_remove = request.json.get('content_to_remove')
+    
+    if not filename or not content_to_remove:
+        return jsonify({"error": "파일명이나 삭제할 내용이 제공되지 않았습니다."}), 400
+    
+    if not os.path.exists(filename):
+        return jsonify({"error": "파일이 존재하지 않습니다."}), 400
+    
+    with open(filename, 'r') as file:
+        content = file.read()
+    
+    new_content = content.replace(content_to_remove, "")
+    
+    with open(filename, 'w') as file:
+        file.write(new_content)
+    
+    return jsonify({"message": f"파일 '{filename}'에서 내용이 성공적으로 삭제되었습니다."}), 200
 
-    file_path = os.path.join(BASE_DIR, file_name)
-
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'a') as file:
-                file.write(content)
-            return jsonify({"message": f"Content added to '{file_name}'!"}), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    else:
-        return jsonify({"error": "File not found!"}), 404
-
-# /clear 경로: 파일 내용 삭제
-@app.route('/clear', methods=['POST'])
-def clear_file():
-    """
-    POST 요청으로 파일 내용을 삭제하는 API.
-    요청 본문에 'file_name'을 포함하여 해당 파일의 내용을 지움.
-    """
-    file_name = request.json.get('file_name', '').strip()
-
-    error_message, status_code = validate_input(file_name)
-    if error_message:
-        return jsonify({"error": error_message}), status_code
-
-    file_path = os.path.join(BASE_DIR, file_name)
-
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'w') as file:
-                file.write("")  # 파일 내용 삭제
-            return jsonify({"message": f"Content of '{file_name}' cleared!"}), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    else:
-        return jsonify({"error": "File not found!"}), 404
-
+# 서버 실행
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(debug=True)
